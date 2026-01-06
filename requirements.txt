@@ -1,0 +1,28 @@
+# Dashboard NPS - Gobrax
+# Dependências do projeto
+
+# Framework principal
+streamlit==1.31.0
+
+# BigQuery
+google-cloud-bigquery==3.17.1
+google-auth==2.27.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+db-dtypes==1.2.0
+
+# Processamento de dados
+pandas==2.2.0
+numpy==1.26.3
+
+# Visualizações
+plotly==5.18.0
+
+# WordCloud
+wordcloud==1.9.3
+matplotlib==3.8.2
+Pillow==10.2.0
+
+# Utilitários
+python-dotenv==1.0.1
+pytz==2024.1

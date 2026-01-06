@@ -1,0 +1,20 @@
+# Dependências de Desenvolvimento - Dashboard NPS
+
+# Incluir dependências principais
+-r requirements.txt
+
+# Testes
+pytest==7.4.4
+pytest-cov==4.1.0
+
+# Linting e formatação
+black==24.1.1
+flake8==7.0.0
+pylint==3.0.3
+
+# Type checking
+mypy==1.8.0
+
+# Documentação
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0

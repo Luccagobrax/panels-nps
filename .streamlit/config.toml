@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Streamlit Configuration - Dashboard NPS Gobrax
+# ═══════════════════════════════════════════════════════════════════════════════
+
+[theme]
+# Tema Dark customizado
+primaryColor = "#10B981"        # Verde (Promotor)
+backgroundColor = "#0E1117"     # Background escuro
+secondaryBackgroundColor = "#1E1E1E"  # Cards
+textColor = "#FAFAFA"           # Texto principal
+font = "sans serif"
+
+[server]
+# Configurações do servidor
+port = 8501
+enableCORS = true
+enableXsrfProtection = true
+maxUploadSize = 200
+
+# Timeout de conexão (segundos)
+# connectionTimeout = 30
+
+[browser]
+# Configurações do navegador
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[runner]
+# Configurações de execução
+magicEnabled = false
+fastReruns = true
+
+[client]
+# Configurações do cliente
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[logger]
+# Configurações de log
+level = "info"
+messageFormat = "%(asctime)s %(levelname)s: %(message)s"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Notas:
+# - Ajuste primaryColor para mudar a cor de destaque
+# - Para produção, defina gatherUsageStats = true se desejar analytics
+# - maxUploadSize está em MB
+# ═══════════════════════════════════════════════════════════════════════════════
