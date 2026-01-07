@@ -41,29 +41,37 @@ def calcular_nps(df: pd.DataFrame) -> float:
 def calcular_nps_ponderado(df: pd.DataFrame) -> float:
     """
     Calcula o NPS ponderado pela frota.
-    Fórmula: (Σ nota_media_empresa × qtd_frota) / Σ qtd_frota
+    Fórmula: ((Σ frota_promotores - Σ frota_detratores) / Σ frota_total) × 100
 
     Args:
-        df: DataFrame com colunas 'nota_media_empresa' e 'qtd_frota'
+        df: DataFrame com colunas 'classificacao_empresa' e 'qtd_frota'
 
     Returns:
-        float: NPS ponderado
+        float: NPS ponderado (-100 a 100)
     """
-    if df.empty or 'qtd_frota' not in df.columns or 'nota_media_empresa' not in df.columns:
+    if df.empty or 'qtd_frota' not in df.columns or 'classificacao_empresa' not in df.columns:
         return 0.0
 
-    df_clean = df.dropna(subset=['qtd_frota', 'nota_media_empresa'])
+    df_clean = df.dropna(subset=['qtd_frota', 'classificacao_empresa'])
 
     if df_clean.empty:
         return 0.0
 
-    soma_ponderada = (df_clean['nota_media_empresa'] * df_clean['qtd_frota']).sum()
-    soma_frota = df_clean['qtd_frota'].sum()
+    # Soma da frota dos promotores
+    frota_promotores = df_clean[df_clean['classificacao_empresa'] == 'Promotor']['qtd_frota'].sum()
 
-    if soma_frota == 0:
+    # Soma da frota dos detratores
+    frota_detratores = df_clean[df_clean['classificacao_empresa'] == 'Detrator']['qtd_frota'].sum()
+
+    # Soma total da frota
+    frota_total = df_clean['qtd_frota'].sum()
+
+    if frota_total == 0:
         return 0.0
 
-    nps_ponderado = soma_ponderada / soma_frota
+    # Calcular NPS ponderado: ((promotores - detratores) / total) * 100
+    nps_ponderado = ((frota_promotores - frota_detratores) / frota_total) * 100
+
     return round(nps_ponderado, 2)
 
 
