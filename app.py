@@ -38,12 +38,17 @@ def get_bigquery_client():
     Cria e retorna cliente do BigQuery (cached).
     """
     try:
-        # Tenta usar Application Default Credentials ou variável de ambiente
-        client = bigquery.Client()
+        from google.oauth2 import service_account
+
+        # Usar secrets do Streamlit Cloud
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        client = bigquery.Client(credentials=credentials)
         return client
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao BigQuery: {str(e)}")
-        st.info("🔧 Verifique se GOOGLE_APPLICATION_CREDENTIALS está configurado corretamente.")
+        st.info("🔧 Verifique se as credenciais do BigQuery estão configuradas corretamente nos Secrets.")
         st.stop()
 
 
