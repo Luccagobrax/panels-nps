@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from google.cloud import bigquery
 from datetime import datetime
 import os
-import matplotlib.pyplot as plt
 
 # Imports locais
 from config import (
