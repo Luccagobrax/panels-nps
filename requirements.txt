@@ -21,7 +21,7 @@ plotly==5.18.0
 # WordCloud
 wordcloud==1.9.3
 matplotlib==3.8.2
-Pillow==10.2.0
+Pillow>=10.4.0
 
 # Utilitários
 python-dotenv==1.0.1
