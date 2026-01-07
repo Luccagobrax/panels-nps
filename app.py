@@ -774,8 +774,6 @@ def main():
     renderizar_detratores_risco(df_filtrado)
     st.markdown("<br><br>", unsafe_allow_html=True)
 
-    renderizar_analise_qualitativa(df_filtrado)
-
     # Footer
     st.markdown("---")
     st.markdown("""
