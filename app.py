@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from google.cloud import bigquery
 from datetime import datetime
 import os
-from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 # Imports locais
@@ -676,43 +675,6 @@ def renderizar_detratores_risco(df: pd.DataFrame):
         use_container_width=True,
         height=400
     )
-
-
-def renderizar_analise_qualitativa(df: pd.DataFrame):
-    """
-    Renderiza análise qualitativa (WordCloud + Comentários).
-    """
-    st.markdown("## 💬 Análise Qualitativa")
-
-    # WordCloud
-    st.markdown("### ☁️ Nuvem de Palavras - Principais Temas")
-
-    texto_wordcloud = gerar_texto_wordcloud(df, STOPWORDS_PT)
-
-    if texto_wordcloud and len(texto_wordcloud) > 10:
-        try:
-            wordcloud = WordCloud(
-                width=1200,
-                height=400,
-                background_color=COLORS['card'],
-                colormap='RdYlGn',
-                max_words=100,
-                stopwords=STOPWORDS_PT,
-                collocations=False
-            ).generate(texto_wordcloud)
-
-            fig, ax = plt.subplots(figsize=(15, 5))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis('off')
-            fig.patch.set_facecolor(COLORS['background'])
-
-            st.pyplot(fig)
-        except Exception as e:
-            st.warning(f"Não foi possível gerar a wordcloud: {str(e)}")
-    else:
-        st.info("Comentários insuficientes para gerar a nuvem de palavras")
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     # Comentários por classificação
     st.markdown("### 📝 Comentários por Classificação")
