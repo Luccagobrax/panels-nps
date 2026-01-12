@@ -1021,7 +1021,6 @@ def renderizar_detratores_risco(df: pd.DataFrame):
                                 border-left: 4px solid {COLORS['neutro']}; margin-bottom: 10px;'>
                         <div style='font-weight: 600; color: {COLORS['neutro']};'>
                             {com['empresa']} - Nota: {com['nota']:.1f} | {com['data']}
-                        </div>
                         <div style='margin-top: 8px; color: {COLORS['text']};'>
                             {com['comentario']}
                     </div>
