@@ -86,6 +86,27 @@ SELECT
     qualidade_match
 FROM `{FULL_TABLE_PATH}`
 WHERE nota_media_empresa IS NOT NULL
+  AND DATE(ultima_resposta) <= CURRENT_DATE()
+"""
+
+QUERY_USUARIOS_INATIVOS = """
+SELECT 
+  nome_usuario AS user_name,
+  email_usuario AS email,
+  empresa AS customer_name,
+  perfil,
+  ultima_atividade
+FROM `equipe-dados.datawarehouse_gobrax.nps_usuarios_inativos`
+"""
+
+QUERY_USUARIOS_RESPONDERAM = """
+SELECT
+    user_name,
+    email,
+    customer_name,
+    score,
+    comment
+FROM `equipe-dados.datawarehouse_gobrax.dw_core_mgmt_nps`
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════

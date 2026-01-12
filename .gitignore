@@ -53,6 +53,7 @@ data/
 *.xlsx
 *.db
 *.sqlite
+*.json
 
 # Testes
 .pytest_cache/

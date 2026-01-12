@@ -9,6 +9,7 @@ import os
 # Imports locais
 from config import (
     PAGE_CONFIG, CUSTOM_CSS, COLORS, QUERY_MAIN,
+    QUERY_USUARIOS_INATIVOS, QUERY_USUARIOS_RESPONDERAM,
     CLASSIFICACAO_EMOJI, FLAG_EMOJI, STOPWORDS_PT, CACHE_TTL
 )
 from utils import (
@@ -36,21 +37,79 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def get_bigquery_client():
     """
     Cria e retorna cliente do BigQuery (cached).
+    Suporta execução local e no Streamlit Cloud.
     """
-    try:
-        from google.oauth2 import service_account
+    from google.oauth2 import service_account
+    import json
 
-        # Usar secrets do Streamlit Cloud
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"]
-        )
-        client = bigquery.Client(credentials=credentials)
+    # Tentar usar secrets do Streamlit Cloud primeiro
+    try:
+        if "gcp_service_account" in st.secrets:
+            credentials = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"]
+            )
+            client = bigquery.Client(credentials=credentials)
+            return client
+    except Exception:
+        # Se falhar ao acessar secrets, continuar para tentar arquivo local
+        pass
+
+    # Se não estiver no Streamlit Cloud, tentar usar credenciais locais
+    # Tentar múltiplos caminhos para o arquivo de credenciais
+    caminhos_possiveis = [
+        "credentials.json",
+        os.path.join(os.path.dirname(__file__), "credentials.json"),
+        os.path.join(os.getcwd(), "credentials.json"),
+    ]
+
+    for caminho in caminhos_possiveis:
+        if os.path.exists(caminho):
+            try:
+                credentials = service_account.Credentials.from_service_account_file(caminho)
+
+                # Extrair project_id do arquivo de credenciais
+                with open(caminho, 'r') as f:
+                    creds_data = json.load(f)
+                    project_id = creds_data.get('project_id')
+
+                client = bigquery.Client(credentials=credentials, project=project_id)
+                return client
+            except Exception as e:
+                st.warning(f"⚠️ Falha ao usar {caminho}: {str(e)}")
+                continue
+
+    # Se não encontrou arquivo, tentar credenciais padrão do ambiente
+    try:
+        client = bigquery.Client()
         return client
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao BigQuery: {str(e)}")
-        st.info("🔧 Verifique se as credenciais do BigQuery estão configuradas corretamente nos Secrets.")
-        st.stop()
 
+        # Informações de debug
+        st.warning("📍 **Informações de Debug:**")
+        st.code(f"""
+Diretório atual: {os.getcwd()}
+Diretório do script: {os.path.dirname(__file__)}
+Arquivo credentials.json existe? {os.path.exists('credentials.json')}
+        """)
+
+        st.info("""
+        🔧 **Como configurar as credenciais localmente:**
+
+        **Opção 1 - Arquivo de credenciais (Recomendado):**
+        1. Baixe o arquivo JSON de credenciais da sua conta de serviço do GCP
+        2. Renomeie para `credentials.json`
+        3. Coloque na pasta raiz do projeto
+        4. Verifique se o arquivo tem permissões de leitura
+
+        **Opção 2 - Google Cloud CLI:**
+        1. Instale o Google Cloud CLI
+        2. Execute: `gcloud auth application-default login`
+
+        **Opção 3 - Variável de ambiente:**
+        1. Configure: `set GOOGLE_APPLICATION_CREDENTIALS=caminho\\para\\credentials.json`
+        """)
+        st.stop()
 
 @st.cache_data(ttl=CACHE_TTL)
 def carregar_dados():
@@ -74,6 +133,58 @@ def carregar_dados():
     except Exception as e:
         st.error(f"❌ Erro ao carregar dados: {str(e)}")
         st.stop()
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def carregar_usuarios_inativos():
+    """
+    Carrega dados de usuarios inativos do BigQuery com cache de 1 hora.
+    """
+    try:
+        client = get_bigquery_client()
+
+        with st.spinner("Carregando usuarios inativos..."):
+            df = client.query(QUERY_USUARIOS_INATIVOS).to_dataframe()
+
+        # Normalize column names from the query.
+        rename_map = {
+            "nome_usuario": "user_name",
+            "email_usuario": "email",
+            "empresa": "customer_name",
+        }
+        for src, dst in rename_map.items():
+            if dst not in df.columns and src in df.columns:
+                df = df.rename(columns={src: dst})
+
+        required_cols = ["user_name", "email", "customer_name", "perfil", "ultima_atividade"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            st.error(f"Erro: colunas ausentes em usuarios inativos: {', '.join(missing_cols)}")
+            return pd.DataFrame()
+
+        return df
+
+    except Exception as e:
+        st.error(f"Erro ao carregar usuarios inativos: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def carregar_usuarios_responderam():
+    """
+    Carrega dados de usuários que responderam ao NPS do BigQuery com cache de 1 hora.
+    """
+    try:
+        client = get_bigquery_client()
+
+        with st.spinner("📝 Carregando usuários que responderam..."):
+            df = client.query(QUERY_USUARIOS_RESPONDERAM).to_dataframe()
+
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar usuários que responderam: {str(e)}")
+        return pd.DataFrame()
 
 
 def limpar_cache():
@@ -620,6 +731,242 @@ def renderizar_tabela_clientes(df: pd.DataFrame):
     )
 
 
+def renderizar_usuarios_inativos(df_inativos: pd.DataFrame):
+    """
+    Renderiza seção de usuários que acessaram a plataforma mas não responderam ao NPS.
+    """
+    st.markdown("## 📋 Usuários Inativos no NPS")
+
+    if df_inativos.empty:
+        st.info("✅ Não há usuários inativos no momento!")
+        return
+
+    # Calcular dias desde último acesso
+    df_inativos['dias_sem_acesso'] = (pd.to_datetime('today') - pd.to_datetime(df_inativos['ultima_atividade'])).dt.days
+
+    # Calcular métricas
+    total_inativos = len(df_inativos)
+    total_empresas = df_inativos['customer_name'].nunique()
+    media_dias = df_inativos['dias_sem_acesso'].mean()
+
+    # Exibir cards de métricas
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['detrator']};'>
+                <div class='metric-label'>USUÁRIOS INATIVOS</div>
+                <div class='metric-value' style='color: {COLORS['detrator']};'>{formatar_numero(total_inativos)}</div>
+                <div class='metric-subtitle'>Não responderam ao NPS</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['neutro']};'>
+                <div class='metric-label'>EMPRESAS ÚNICAS</div>
+                <div class='metric-value' style='color: {COLORS['neutro']};'>{formatar_numero(total_empresas)}</div>
+                <div class='metric-subtitle'>Com usuários inativos</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['text']};'>
+                <div class='metric-label'>MÉDIA DE DIAS</div>
+                <div class='metric-value' style='color: {COLORS['text']};'>{formatar_numero(media_dias, 1)}</div>
+                <div class='metric-subtitle'>Desde último acesso</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Filtros
+    st.markdown("### 🔍 Filtros")
+    col_filtro1, col_filtro2 = st.columns(2)
+
+    with col_filtro1:
+        empresas_disponiveis = sorted(df_inativos['customer_name'].dropna().unique().tolist())
+        empresas_selecionadas = st.multiselect(
+            "Filtrar por Empresa",
+            options=empresas_disponiveis,
+            default=empresas_disponiveis,
+            key="filtro_empresa_inativos"
+        )
+
+    with col_filtro2:
+        perfis_disponiveis = sorted(df_inativos['perfil'].dropna().unique().tolist())
+        perfis_selecionados = st.multiselect(
+            "Filtrar por Perfil",
+            options=perfis_disponiveis,
+            default=perfis_disponiveis,
+            key="filtro_perfil_inativos"
+        )
+
+    # Aplicar filtros
+    df_filtrado = df_inativos.copy()
+    if empresas_selecionadas:
+        df_filtrado = df_filtrado[df_filtrado['customer_name'].isin(empresas_selecionadas)]
+    if perfis_selecionados:
+        df_filtrado = df_filtrado[df_filtrado['perfil'].isin(perfis_selecionados)]
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Gráfico: Top 10 empresas com mais usuários inativos
+    st.markdown("### 📊 Top 10 Empresas com Mais Usuários Inativos")
+
+    empresas_count = df_filtrado['customer_name'].value_counts().head(10)
+
+    if not empresas_count.empty:
+        fig = go.Figure(go.Bar(
+            x=empresas_count.values,
+            y=empresas_count.index,
+            orientation='h',
+            marker=dict(color=COLORS['detrator']),
+            text=empresas_count.values,
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Usuários Inativos: %{x}<extra></extra>'
+        ))
+
+        fig.update_layout(
+            xaxis_title="Quantidade de Usuários Inativos",
+            yaxis_title="",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=COLORS['text']),
+            height=400,
+            xaxis=dict(gridcolor=COLORS['card_border']),
+            yaxis=dict(gridcolor=COLORS['card_border'])
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Sem dados disponíveis para exibir o gráfico")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Tabela com cores condicionais
+    st.markdown("### 📋 Tabela de Usuários Inativos")
+
+    # Preparar dados para exibição
+    df_display = df_filtrado.copy()
+    df_display['Nome'] = df_display['user_name']
+    df_display['Email'] = df_display['email']
+    df_display['Empresa'] = df_display['customer_name']
+    df_display['Perfil'] = df_display['perfil']
+    df_display['Última Atividade'] = pd.to_datetime(df_display['ultima_atividade']).dt.strftime('%d/%m/%Y')
+    df_display['Dias Sem Acesso'] = df_display['dias_sem_acesso']
+
+    # Aplicar cores condicionais
+    def aplicar_cor_linha(row):
+        dias = row['Dias Sem Acesso']
+        if dias < 14:
+            return '#d4edda'  # Verde claro
+        elif dias <= 30:
+            return '#fff3cd'  # Amarelo claro
+        else:
+            return '#ffcccc'  # Vermelho claro
+
+    df_display['_cor'] = df_display.apply(aplicar_cor_linha, axis=1)
+
+    # Selecionar colunas para exibição
+    colunas_exibir = ['Nome', 'Email', 'Empresa', 'Perfil', 'Última Atividade', 'Dias Sem Acesso']
+
+    # Ordenar por dias sem acesso (decrescente)
+    df_display = df_display.sort_values('Dias Sem Acesso', ascending=False)
+
+    # Exibir tabela
+    st.dataframe(
+        df_display[colunas_exibir],
+        use_container_width=True,
+        height=600
+    )
+
+    # Botão de download CSV
+    csv = df_display[colunas_exibir].to_csv(index=False, encoding='utf-8-sig')
+    st.download_button(
+        label="📥 Download CSV",
+        data=csv,
+        file_name=f"usuarios_inativos_nps_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+
+
+def renderizar_usuarios_responderam(df_responderam: pd.DataFrame):
+    """
+    Renderiza secao de usuarios que responderam ao NPS.
+    """
+    st.markdown("## Usuarios que Responderam ao NPS")
+
+    if df_responderam.empty:
+        st.info("Nao ha usuarios com respostas no momento.")
+        return
+
+    required_cols = ["user_name", "email", "customer_name", "score", "comment"]
+    missing_cols = [col for col in required_cols if col not in df_responderam.columns]
+    if missing_cols:
+        st.error(f"Erro: colunas ausentes em usuarios responderam: {', '.join(missing_cols)}")
+        return
+
+    total_respostas = len(df_responderam)
+    total_empresas = df_responderam["customer_name"].nunique()
+    media_score = df_responderam["score"].mean()
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['promotor']};'>
+                <div class='metric-label'>RESPOSTAS</div>
+                <div class='metric-value' style='color: {COLORS['promotor']};'>{formatar_numero(total_respostas)}</div>
+                <div class='metric-subtitle'>Usuarios que responderam</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['neutro']};'>
+                <div class='metric-label'>EMPRESAS</div>
+                <div class='metric-value' style='color: {COLORS['neutro']};'>{formatar_numero(total_empresas)}</div>
+                <div class='metric-subtitle'>Empresas unicas</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+            <div class='metric-card' style='border-left: 4px solid {COLORS['text']};'>
+                <div class='metric-label'>MEDIA SCORE</div>
+                <div class='metric-value' style='color: {COLORS['text']};'>{formatar_numero(media_score, 1)}</div>
+                <div class='metric-subtitle'>Nota media</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    df_display = df_responderam.copy()
+    df_display["Nome"] = df_display["user_name"]
+    df_display["Email"] = df_display["email"]
+    df_display["Empresa"] = df_display["customer_name"]
+    df_display["Score"] = df_display["score"].apply(lambda x: formatar_numero(x, 1))
+    df_display["Comentario"] = df_display["comment"].fillna("-")
+
+    colunas_exibir = ["Nome", "Email", "Empresa", "Score", "Comentario"]
+
+    st.dataframe(
+        df_display[colunas_exibir],
+        use_container_width=True,
+        height=600
+    )
+
+    csv = df_display[colunas_exibir].to_csv(index=False, encoding="utf-8-sig")
+    st.download_button(
+        label="Download CSV",
+        data=csv,
+        file_name=f"usuarios_responderam_nps_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+
 def renderizar_detratores_risco(df: pd.DataFrame):
     """
     Renderiza seção de gestão de detratores em risco.
@@ -747,6 +1094,8 @@ def main():
     """
     # Carregar dados
     df_completo = carregar_dados()
+    df_inativos = carregar_usuarios_inativos()
+    df_responderam = carregar_usuarios_responderam()
 
     # Renderizar sidebar e obter dados filtrados
     df_filtrado = renderizar_sidebar(df_completo)
@@ -759,24 +1108,40 @@ def main():
         st.warning("⚠️ Nenhum dado encontrado com os filtros selecionados. Ajuste os filtros na barra lateral.")
         return
 
-    # Seções do dashboard (em ordem)
-    renderizar_visao_executiva(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    # Criar tabs para organizar as seções
+    tab1, tab2, tab3 = st.tabs([
+        "📊 Dashboard Principal",
+        "📋 Usuários Inativos no NPS",
+        "📝 Usuários que Responderam"
+    ])
 
-    renderizar_distribuicao_notas(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    with tab1:
+        # Seções do dashboard principal (em ordem)
+        renderizar_visao_executiva(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
 
-    renderizar_segmentacoes(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+        renderizar_distribuicao_notas(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
 
-    renderizar_heatmap(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+        renderizar_segmentacoes(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
 
-    renderizar_tabela_clientes(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+        renderizar_heatmap(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
 
-    renderizar_detratores_risco(df_filtrado)
-    st.markdown("<br><br>", unsafe_allow_html=True)
+        renderizar_tabela_clientes(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
+        renderizar_detratores_risco(df_filtrado)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
+    with tab2:
+        # Seção de usuários inativos
+        renderizar_usuarios_inativos(df_inativos)
+
+    with tab3:
+        # Seção de usuários que responderam
+        renderizar_usuarios_responderam(df_responderam)
 
     # Footer
     st.markdown("---")
