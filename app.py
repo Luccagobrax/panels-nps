@@ -750,7 +750,7 @@ def renderizar_usuarios_inativos(df_inativos: pd.DataFrame):
     media_dias = df_inativos['dias_sem_acesso'].mean()
 
     # Exibir cards de métricas
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     with col1:
         st.markdown(f"""
@@ -770,47 +770,9 @@ def renderizar_usuarios_inativos(df_inativos: pd.DataFrame):
             </div>
         """, unsafe_allow_html=True)
 
-    with col3:
-        st.markdown(f"""
-            <div class='metric-card' style='border-left: 4px solid {COLORS['text']};'>
-                <div class='metric-label'>MÉDIA DE DIAS</div>
-                <div class='metric-value' style='color: {COLORS['text']};'>{formatar_numero(media_dias, 1)}</div>
-                <div class='metric-subtitle'>Desde último acesso</div>
-            </div>
-        """, unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Filtros
-    st.markdown("### 🔍 Filtros")
-    col_filtro1, col_filtro2 = st.columns(2)
-
-    with col_filtro1:
-        empresas_disponiveis = sorted(df_inativos['customer_name'].dropna().unique().tolist())
-        empresas_selecionadas = st.multiselect(
-            "Filtrar por Empresa",
-            options=empresas_disponiveis,
-            default=empresas_disponiveis,
-            key="filtro_empresa_inativos"
-        )
-
-    with col_filtro2:
-        perfis_disponiveis = sorted(df_inativos['perfil'].dropna().unique().tolist())
-        perfis_selecionados = st.multiselect(
-            "Filtrar por Perfil",
-            options=perfis_disponiveis,
-            default=perfis_disponiveis,
-            key="filtro_perfil_inativos"
-        )
-
-    # Aplicar filtros
     df_filtrado = df_inativos.copy()
-    if empresas_selecionadas:
-        df_filtrado = df_filtrado[df_filtrado['customer_name'].isin(empresas_selecionadas)]
-    if perfis_selecionados:
-        df_filtrado = df_filtrado[df_filtrado['perfil'].isin(perfis_selecionados)]
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     # Gráfico: Top 10 empresas com mais usuários inativos
     st.markdown("### 📊 Top 10 Empresas com Mais Usuários Inativos")
